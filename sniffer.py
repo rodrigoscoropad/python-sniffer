@@ -10,7 +10,7 @@ counter = [0,0,0,0,0,0,0,0]
 
 def main():
     s = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.ntohs(3))
-    while get_total(counter) < 10000:
+    while True:
         raw_data, addr = s.recvfrom(65535)
         eth = ethernet_head(raw_data)
         print('\nEthernet Frame:')
@@ -65,7 +65,8 @@ def main():
             if ipv4[3] == 17:
                 udp = udp_head(ipv4[6])
                 print('\t -' + ' UDP Segment:')
-                print('\t\t -' + ' Source Port: {}, Destination Port: {}, Length: {}, CheckSum: {}'.format(udp[0], udp[1], udp[2], udp[3]))
+                print('\t\t -' + ' Source Port: {}, Destination Port: {}, Length: {}, CheckSum: {}'.format(
+                    udp[0], udp[1], udp[2], udp[3]))
                 #DNS
                 #Client source 68 destination 67
                 #SRV source 67 destination 68
@@ -74,12 +75,14 @@ def main():
                     #send DHCPOffer
                     #get dhcprequest 
                     #send dhcpack(similar to offer)
+                    dhcp_header(udp[4])
+                    x = 1
 
 
 
                     
 
-                if udp[0] == 53 or udp[1] == 53:
+                elif udp[0] == 53 or udp[1] == 53:
                     dns = dns_head(udp[4])
                     print('ID: {} Flags: {} QDCOUNT: {} ANCOUNT: {} NSCOUNT: {} ARCOUNT: {}'.format(dns[0], dns[1], dns[2], dns[3], dns[4], dns[5]))
                     counter[7] = counter[7] + 1
@@ -214,4 +217,8 @@ def get_total(counters):
 def format_to_percentage(value):
     return value * 100
 
+def dhcp_header(data):
+    #236 a 239
+    op = struct.unpack("! ", data[272:])
+    return op
 main()

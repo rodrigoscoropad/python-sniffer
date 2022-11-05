@@ -1,3 +1,6 @@
+import socket
+import binascii
+
 class DHCPPayload:
     def __init__(self, 
                  opt, 
@@ -54,8 +57,21 @@ class DHCPPayload:
         self._option_255 = option_255
 
     def get_bytes(self):
-        return self._opt.to_bytes(1, 'little') + self._htype.to_bytes(1, 'little') + self._hlen.to_bytes(1, 'little') + self._hops.to_bytes(1, 'little') + self._trans_id + self.se.to_bytes(2, 'little') + self._flags.to_bytes(2, 'little')
-
+        return ( self._opt.to_bytes(1, 'little')
+            + self._htype.to_bytes(1, 'little')
+            + self._hlen.to_bytes(1, 'little')
+            + self._hops.to_bytes(1, 'little')
+            + self._trans_id + self.se.to_bytes(2, 'little')
+            + self._flags.to_bytes(2, 'little')
+            + socket.inet_pton(socket.AF_INET, self._ciaddr)
+            + socket.inet_pton(socket.AF_INET, self._yiaddr)
+            + socket.inet_pton(socket.AF_INET, self._siaddr)
+            + socket.inet_pton(socket.AF_INET, self._giaddr)
+            + binascii.unhexlify(self._chaddr)
+            + self._sname.encode()
+            + self._bname.encode()
+            )
+            
 class EthernetPayload:
 	def __init__(self, destination, source, type):
 		self._destination = destination

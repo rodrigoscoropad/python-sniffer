@@ -5,11 +5,18 @@ import struct
 from struct import *
 import sys
 import textwrap
+from dhcp import *
+from payloads import *
+import pickle
 
 counter = [0,0,0,0,0,0,0,0]
 
 def main():
     s = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.ntohs(3))
+    #s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    s2 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s2.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    #s2.bind(('0.0.0.0', 68))
     while True:
         raw_data, addr = s.recvfrom(65535)
         eth = ethernet_head(raw_data)
@@ -75,10 +82,15 @@ def main():
                     #send DHCPOffer
                     #get dhcprequest 
                     #send dhcpack(similar to offer)
-                    dhcp_header(udp[4])
-                    x = 1
-
-
+                    y = DHCP(udp[4], udp[2] - 8)
+                    y.parse_options()
+                    y.parse_payload()
+                    z = DHCPPayload(2,1,6,0, y._transaction_id, 0x0000, 0x0000,
+                        0x00000000, '192168153', 0x00000000, 0x00000000, y._chaddr, 0x00000000000000000000,
+                        '................................................................................................................................'
+                        '................................................................',
+                        DHCP_Protocol.magic_cookie, '','','','','','','','','','','')
+                    s2.sendto(z.get_bytes(), ('255.255.255.255', 67));
 
                     
 
@@ -219,6 +231,7 @@ def format_to_percentage(value):
 
 def dhcp_header(data):
     #236 a 239
-    op = struct.unpack("! ", data[272:])
-    return op
+    #type = struct.unpack("! B ", data[240])
+    #B B", data[240:243])
+    return 0
 main()

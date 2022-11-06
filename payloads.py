@@ -19,18 +19,19 @@ class DHCPPayload:
                  chaddr_padding,
                  sname,
                  bname,
-                 mcookie,
-                 option_53,
-                 option_51,
-                 option_1,
-                 option_3,
-                 option_6,
-                 option_54,
-                 option_125,
-                 option_58,
-                 option_59,
-                 option_28,
-                 option_255):
+                 mcookie, 
+                 option):
+                #  option_53,
+                #  option_51,
+                #  option_1,
+                #  option_3,
+                #  option_6,
+                #  option_54,
+                #  option_125,
+                #  option_58,
+                #  option_59,
+                #  option_28,
+                #  option_255):
         self._opt = opt
         self._htype = htype
         self._hlen = hlen
@@ -47,11 +48,12 @@ class DHCPPayload:
         self._sname = sname
         self._bname = bname
         self._mcookie = mcookie
-        self._option_53 = option_53
-        self._option_51 = option_51
-        self._option_1 = option_1
-        self._option_3 = option_3
-        self._option_6 = option_6
+        self._option = option
+        # self._option_53 = option_53
+        # self._option_51 = option_51
+        # self._option_1 = option_1
+        # self._option_3 = option_3
+        # self._option_6 = option_6
         # self._option_54 = option_54
         # self._option_125 = option_125
         # self._option_58 = option_58
@@ -75,7 +77,7 @@ class DHCPPayload:
             + binascii.unhexlify(self._sname)
             + binascii.unhexlify(self._bname) 
             + binascii.unhexlify(self._mcookie)
-            + Options.get_offer_options()
+            + Options.get_options_by_package(self._option)
             # + binascii.unhexlify(self._option_53) 
             # + b'04' + binascii.unhexlify(self._option_51)
             # + b'04' + binascii.unhexlify(self._option_1)
@@ -104,15 +106,36 @@ class IPV4Payload:
 
 
 class Options(Enum):
+    OFFER = 'offer'
+    ACK = 'ack'
+
+    @staticmethod
+    def get_options_by_package(option):
+        if option == Options.OFFER:
+            return Options.get_offer_options()
+        elif option == Options.ACK:
+            return Options.get_ack_options()
+        return 
+
     @staticmethod
     def get_offer_options():
-        return (binascii.unhexlify(Options.option_53() + Options.option_51() + Options.option_1() + Options.option_59())
+        return (binascii.unhexlify(Options.option_53_offer() + Options.option_51() + Options.option_1() + Options.option_59())
             + Options.option_3() + Options.option_6() + Options.option_54() + Options.option_28() + Options.option_255()
         )
     
     @staticmethod
-    def option_53():
+    def get_ack_options():
+        return (binascii.unhexlify(Options.option_53_ack() + Options.option_51() + Options.option_1() + Options.option_59())
+            + Options.option_3() + Options.option_6() + Options.option_54() + Options.option_28() + Options.option_255()
+        )
+    
+    @staticmethod
+    def option_53_offer():
         return '350102'
+
+    @staticmethod
+    def option_53_ack():
+        return '350105'
 
     @staticmethod
     def option_51():
@@ -152,4 +175,4 @@ class Options(Enum):
     
     @staticmethod
     def get_ip():
-        return socket.inet_pton(socket.AF_INET, socket.gethostbyname(socket.gethostname()))
+        return socket.inet_pton(socket.AF_INET, '192.168.15.10')#socket.gethostbyname(socket.gethostname()))

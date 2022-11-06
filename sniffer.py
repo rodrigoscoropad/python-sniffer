@@ -16,6 +16,7 @@ def main():
     #s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     s2 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s2.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    step = 'DHCPDISCOVER'
     #s2.bind(('0.0.0.0', 68))
     while True:
         raw_data, addr = s.recvfrom(65535)
@@ -82,17 +83,24 @@ def main():
                     #send DHCPOffer
                     #get dhcprequest 
                     #send dhcpack(similar to offer)
-                    y = DHCP(udp[4], udp[2] - 8)
-                    y.parse_options()
-                    y.parse_payload()
-                    z = DHCPPayload(2,1,6,0, y._transaction_id, 0x0000, 0x0000,
-                        '0.0.0.0', '192.168.15.3', '0.0.0.0', '0.0.0.0', y._chaddr, '00000000000000000000',
-                        '00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
-                        '0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
-                        DHCP_Protocol.magic_cookie, '','330400003840','0104ffffff00', socket.gethostbyname(socket.gethostname()), socket.gethostbyname(socket.gethostname()),'','','','','','')
-                    s2.sendto(z.get_bytes(), ('255.255.255.255', 67));
-
-                    
+                    dhcp_package = DHCP(udp[4], udp[2] - 8)
+                    dhcp_package.parse_options()
+                    dhcp_package.parse_payload()
+                    if dhcp_package._option_53 == 'DHCPDISCOVER' and step == 'DHCPDISCOVER':
+                        payload = DHCPPayload(2,1,6,0, dhcp_package._transaction_id, 0x0000, 0x0000,
+                            '0.0.0.0', '192.168.15.98', '0.0.0.0', '0.0.0.0', dhcp_package._chaddr, '00000000000000000000',
+                            '00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
+                            '0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
+                            DHCP_Protocol.magic_cookie, Options.OFFER)
+                        s2.sendto(payload.get_bytes(), ('255.255.255.255', 68))
+                        step = 'DHCPREQUEST'
+                    elif dhcp_package._option_53 == 'DHCPREQUEST' and step == 'DHCPREQUEST':
+                        payload = DHCPPayload(2,1,6,0, dhcp_package._transaction_id, 0x0000, 0x0000,
+                            '0.0.0.0', '192.168.15.98', '0.0.0.0', '0.0.0.0', dhcp_package._chaddr, '00000000000000000000',
+                            '00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
+                            '0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
+                            DHCP_Protocol.magic_cookie, Options.ACK)
+                        s2.sendto(payload.get_bytes(), ('255.255.255.255', 68))
 
                 elif udp[0] == 53 or udp[1] == 53:
                     dns = dns_head(udp[4])
@@ -229,9 +237,7 @@ def get_total(counters):
 def format_to_percentage(value):
     return value * 100
 
-def dhcp_header(data):
-    #236 a 239
-    #type = struct.unpack("! B ", data[240])
-    #B B", data[240:243])
-    return 0
+def make_response_payload(option, dhcp_package):
+    if Options.OFFER == option:
+        return 
 main()

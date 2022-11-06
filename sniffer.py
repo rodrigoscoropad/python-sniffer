@@ -9,7 +9,6 @@ from dhcp import *
 from payloads import *
 import pickle
 
-counter = [0,0,0,0,0,0,0,0]
 
 def main():
     s = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.ntohs(3))
@@ -17,34 +16,32 @@ def main():
     s2 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s2.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     step = 'DHCPDISCOVER'
+
+    should_print = False
+
+    ip_assigned = '192.168.15.98'
     #s2.bind(('0.0.0.0', 68))
+    print("Waiting for dhcp discover from client...")
     while True:
         raw_data, addr = s.recvfrom(65535)
         eth = ethernet_head(raw_data)
-        print('\nEthernet Frame:')
-        print('Destination: {}, Source: {}, Protocol: {}'.format(eth[0], eth[1], eth[2]))
         #Ipv4 Protocol(Internet Layer)
         if eth[2] == '0x800':
             ipv4 = ipv4_head(eth[3])
-            print( '\t - ' + 'IPv4 Packet:')
-            print('\t\t - ' + 'Version: {}, Header Length: {}, TTL: {},'.format(ipv4[0], ipv4[1], ipv4[2]))
-            print('\t\t - ' + 'Protocol: {}, Source: {}, Target: {}'.format(ipv4[3], ipv4[4], ipv4[5]))	
+            should_print = should_print_packages(ip_assigned, ipv4[4])
+            print_ethernet(should_print, eth)
+            print_ipv4(should_print, ipv4)
+            
             #TCP
             if ipv4[3] == 6:
                 tcp = tcp_head(ipv4[6])
-                print('\t - ' + 'TCP Segment:')
-                print('\t\t - ' + 'Source Port: {}, Destination Port: {}'.format(tcp[0], tcp[1]))
-                print('\t\t - ' + 'Sequence: {}, Acknowledgment: {}'.format(tcp[2], tcp[3]))
-                print('\t\t - ' + 'Flags:')
-                print('\t\t\t - ' + 'URG: {}, ACK: {}, PSH:{}'.format(tcp[4], tcp[5], tcp[6]))
-                print('\t\t\t - ' + 'RST: {}, SYN: {}, FIN:{}'.format(tcp[7], tcp[8], tcp[9]))
+                print_tcp(should_print, tcp)
 
                 if tcp[0] == 53 or tcp[1] == 53:
                     dns = dns_head(tcp[10])
-                    print('ID: {} Flags: {} QDCOUNT: {} ANCOUNT: {} NSCOUNT: {} ARCOUNT: {}'.format(dns[0], dns[1], dns[2], dns[3], dns[4], dns[5]))
-                    counter[7] = counter[7] + 1
+                    print_dns(should_print, dns)
                 else:
-                    if len(tcp[10]) > 0:
+                    if len(tcp[10]) > 0 and should_print:
                         # HTTP
                         if tcp[0] == 80 or tcp[1] == 80:
                             print('\t\t -' + 'HTTP Data:')
@@ -58,58 +55,46 @@ def main():
                         else:
                             print('\t\t -' + 'TCP Data:')
                             print(format_multi_line('\t\t\t', tcp[10]))
-                counter[5] = counter[5] + 1
             #ICMP
             elif ipv4[3] == 1:
                 icmp = icmp_head(ipv4[6])
-                print('\t - ' + 'ICMP Packet:')
-                print('\t\t -' + 'Type: {}, Code: {}, Checksum:{},'.format(icmp[0], icmp[1], icmp[2]))				
-                print('\t\t -' + ' ICMP Data:')
-                print(format_multi_line('\t\t\t', icmp[3]))
-                counter[3] = counter[3] + 1
+                print_icmp(should_print, icmp)
 
             #HERE
             #UDP            
             if ipv4[3] == 17:
                 udp = udp_head(ipv4[6])
-                print('\t -' + ' UDP Segment:')
-                print('\t\t -' + ' Source Port: {}, Destination Port: {}, Length: {}, CheckSum: {}'.format(
-                    udp[0], udp[1], udp[2], udp[3]))
+                print_udp(should_print,udp)
                 #DNS
                 #Client source 68 destination 67
                 #SRV source 67 destination 68
                 if udp[0] == 68 or udp[1] == 67:
-                    #get package dhcp discover
-                    #send DHCPOffer
-                    #get dhcprequest 
-                    #send dhcpack(similar to offer)
                     dhcp_package = DHCP(udp[4], udp[2] - 8)
                     dhcp_package.parse_options()
                     dhcp_package.parse_payload()
                     if dhcp_package._option_53 == 'DHCPDISCOVER' and step == 'DHCPDISCOVER':
+                        print('Received Discover, sending offer...')
                         payload = DHCPPayload(2,1,6,0, dhcp_package._transaction_id, 0x0000, 0x0000,
-                            '0.0.0.0', '192.168.15.98', '0.0.0.0', '0.0.0.0', dhcp_package._chaddr, '00000000000000000000',
+                            '0.0.0.0', ip_assigned, '0.0.0.0', '0.0.0.0', dhcp_package._chaddr, '00000000000000000000',
                             '00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
                             '0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
                             DHCP_Protocol.magic_cookie, Options.OFFER)
                         s2.sendto(payload.get_bytes(), ('255.255.255.255', 68))
                         step = 'DHCPREQUEST'
                     elif dhcp_package._option_53 == 'DHCPREQUEST' and step == 'DHCPREQUEST':
+                        print('Received Request, sending ack...')
                         payload = DHCPPayload(2,1,6,0, dhcp_package._transaction_id, 0x0000, 0x0000,
-                            '0.0.0.0', '192.168.15.98', '0.0.0.0', '0.0.0.0', dhcp_package._chaddr, '00000000000000000000',
+                            '0.0.0.0', ip_assigned, '0.0.0.0', '0.0.0.0', dhcp_package._chaddr, '00000000000000000000',
                             '00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
                             '0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
                             DHCP_Protocol.magic_cookie, Options.ACK)
                         s2.sendto(payload.get_bytes(), ('255.255.255.255', 68))
 
-                elif udp[0] == 53 or udp[1] == 53:
+                elif (udp[0] == 53 or udp[1] == 53) and should_print:
                     dns = dns_head(udp[4])
                     print('ID: {} Flags: {} QDCOUNT: {} ANCOUNT: {} NSCOUNT: {} ARCOUNT: {}'.format(dns[0], dns[1], dns[2], dns[3], dns[4], dns[5]))
-                    counter[7] = counter[7] + 1
-                else:
-                    print(format_multi_line('\t\t\t', udp[4]))
-                counter[6] = counter[6] + 1
-            counter[1] = counter[1] + 1
+                #else:
+                #   print(format_multi_line('\t\t\t', udp[4]))
 
 
 
@@ -117,14 +102,9 @@ def main():
         # #ARP
         elif eth[2] == '0x806':
             arp = arp_head(eth[3])
-            print( '\t - ' + 'ARP Packet:')
-            print('\t\t - ' + 'Hardware type: {}, Protocol Type: {}'.format(arp[0], arp[1]))
-            print('\t\t - ' + 'Hardware Size: {}, Protocol Size: {}, Opcode: {}'.format(arp[2], arp[3], arp[4]))
-            print('\t\t - ' + 'Source MAC: {}, Source Ip: {}'.format(get_mac_addr(arp[5]), get_ip(arp[6])))
-            print('\t\t - ' + 'Dest MAC: {}, Dest Ip: {}'.format(get_mac_addr(arp[7]), get_ip(arp[8])))
-            counter[0] = counter[0] + 1
+            print_arp(should_print, arp)
         #IPV6 Protocol(Internet Layer)
-        if eth[2] == '0x86dd':
+        if eth[2] == '0x86dd' and should_print:
             ipv6 = ipv6Header(eth[3])
             print( '\t - ' + 'IPv6 Packet:')
             print('\t\t - ' + 'Version: {}, Payload Length: {}, Next Header: {},'.format(ipv6[0], ipv6[1], ipv6[2]))
@@ -132,16 +112,10 @@ def main():
             print('\t\t - ' + 'Traffic class: {}, Flow Label: {}'.format(ipv6[6], ipv6[7]))
 
             #ICMPv6 
-            if ipv6[2] == 58:
+            if ipv6[2] == 58 and should_print:
                 icmpv6 = icmpv6Header(ipv6[8])
                 print('\t - ' + 'ICMP Packet:')
                 print('\t\t -' + 'Type: {}, Code: {}, Checksum:{},'.format(icmpv6[0], icmpv6[1], icmpv6[2]))	
-                counter[4] = counter[4] + 1
-            counter[2] = counter[2] + 1			
-    print('Total Packages {}'.format(get_total(counter)))
-    print('ARP: {:.2f}%, IPV4: {:.2f}%, IPV6: {:.2f}%'.format(format_to_percentage(counter[0]/get_total(counter)), format_to_percentage(counter[1]/get_total(counter)), format_to_percentage(counter[2]/get_total(counter))))
-    print('ICMP: {:.2f}%, ICMPv6: {:.2f}%, TCP: {:.2f}%'.format(format_to_percentage(counter[3]/get_total(counter)), format_to_percentage(counter[4]/get_total(counter)), format_to_percentage(counter[5]/get_total(counter))))
-    print('UDP: {:.2f}%, DNS: {:.2f}%'.format(format_to_percentage(counter[6]/get_total(counter)), format_to_percentage(counter[7]/get_total(counter))))
         
 def ethernet_head(raw_data):
     dest, src, prototype = struct.unpack('! 6s 6s H', raw_data[:14])
@@ -237,7 +211,53 @@ def get_total(counters):
 def format_to_percentage(value):
     return value * 100
 
-def make_response_payload(option, dhcp_package):
-    if Options.OFFER == option:
-        return 
+def should_print_packages(incoming_ip, client_ip):
+    return incoming_ip == client_ip
+
+def print_ethernet(should_print, eth):
+    if should_print:
+        print('\nEthernet Frame:')
+        print('Destination: {}, Source: {}, Protocol: {}'.format(eth[0], eth[1], eth[2]))
+
+
+def print_ipv4(should_print, ipv4):
+    if should_print:
+        print( '\t - ' + 'IPv4 Packet:')
+        print('\t\t - ' + 'Version: {}, Header Length: {}, TTL: {},'.format(ipv4[0], ipv4[1], ipv4[2]))
+        print('\t\t - ' + 'Protocol: {}, Source: {}, Target: {}'.format(ipv4[3], ipv4[4], ipv4[5]))	
+
+def print_tcp(should_print, tcp):
+    if should_print:
+        print('\t - ' + 'TCP Segment:')
+        print('\t\t - ' + 'Source Port: {}, Destination Port: {}'.format(tcp[0], tcp[1]))
+        print('\t\t - ' + 'Sequence: {}, Acknowledgment: {}'.format(tcp[2], tcp[3]))
+        print('\t\t - ' + 'Flags:')
+        print('\t\t\t - ' + 'URG: {}, ACK: {}, PSH:{}'.format(tcp[4], tcp[5], tcp[6]))
+        print('\t\t\t - ' + 'RST: {}, SYN: {}, FIN:{}'.format(tcp[7], tcp[8], tcp[9]))
+
+def print_dns(should_print, dns):
+    if should_print:
+        print('ID: {} Flags: {} QDCOUNT: {} ANCOUNT: {} NSCOUNT: {} ARCOUNT: {}'.format(dns[0], dns[1], dns[2], dns[3], dns[4], dns[5]))
+
+def print_icmp(should_print, icmp):
+    if should_print:
+        print('\t - ' + 'ICMP Packet:')
+        print('\t\t -' + 'Type: {}, Code: {}, Checksum:{},'.format(icmp[0], icmp[1], icmp[2]))				
+        print('\t\t -' + ' ICMP Data:')
+        print(format_multi_line('\t\t\t', icmp[3]))
+
+def print_udp(should_print, udp):
+    if should_print:
+        print('\t -' + ' UDP Segment:')
+        print('\t\t -' + ' Source Port: {}, Destination Port: {}, Length: {}, CheckSum: {}'.format(
+                    udp[0], udp[1], udp[2], udp[3]))
+
+def print_arp(should_print, arp):
+    if should_print:
+        print( '\t - ' + 'ARP Packet:')
+        print('\t\t - ' + 'Hardware type: {}, Protocol Type: {}'.format(arp[0], arp[1]))
+        print('\t\t - ' + 'Hardware Size: {}, Protocol Size: {}, Opcode: {}'.format(arp[2], arp[3], arp[4]))
+        print('\t\t - ' + 'Source MAC: {}, Source Ip: {}'.format(get_mac_addr(arp[5]), get_ip(arp[6])))
+        print('\t\t - ' + 'Dest MAC: {}, Dest Ip: {}'.format(get_mac_addr(arp[7]), get_ip(arp[8])))
+
 main()

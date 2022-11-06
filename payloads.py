@@ -1,5 +1,6 @@
 import socket
 import binascii
+from enum import Enum
 
 class DHCPPayload:
     def __init__(self, 
@@ -15,6 +16,7 @@ class DHCPPayload:
                  siaddr,
                  giaddr,
                  chaddr,
+                 chaddr_padding,
                  sname,
                  bname,
                  mcookie,
@@ -41,6 +43,7 @@ class DHCPPayload:
         self._siaddr = siaddr
         self._giaddr = giaddr
         self._chaddr = chaddr
+        self._chaddr_padding = chaddr_padding
         self._sname = sname
         self._bname = bname
         self._mcookie = mcookie
@@ -49,27 +52,34 @@ class DHCPPayload:
         self._option_1 = option_1
         self._option_3 = option_3
         self._option_6 = option_6
-        self._option_54 = option_54
-        self._option_125 = option_125
-        self._option_58 = option_58
-        self._option_59 = option_59
-        self._option_28 = option_28
-        self._option_255 = option_255
+        # self._option_54 = option_54
+        # self._option_125 = option_125
+        # self._option_58 = option_58
+        # self._option_59 = option_59
+        # self._option_28 = option_28
+        # self._option_255 = option_255
 
     def get_bytes(self):
         return ( self._opt.to_bytes(1, 'little')
             + self._htype.to_bytes(1, 'little')
             + self._hlen.to_bytes(1, 'little')
             + self._hops.to_bytes(1, 'little')
-            + self._trans_id + self.se.to_bytes(2, 'little')
+            + self._trans_id + self._se.to_bytes(2, 'little')
             + self._flags.to_bytes(2, 'little')
             + socket.inet_pton(socket.AF_INET, self._ciaddr)
             + socket.inet_pton(socket.AF_INET, self._yiaddr)
             + socket.inet_pton(socket.AF_INET, self._siaddr)
             + socket.inet_pton(socket.AF_INET, self._giaddr)
             + binascii.unhexlify(self._chaddr)
-            + self._sname.encode()
-            + self._bname.encode()
+            + binascii.unhexlify(self._chaddr_padding)
+            + binascii.unhexlify(self._sname)
+            + binascii.unhexlify(self._bname) 
+            + binascii.unhexlify(self._mcookie)
+            + Options.get_offer_options()
+            # + binascii.unhexlify(self._option_53) 
+            # + b'04' + binascii.unhexlify(self._option_51)
+            # + b'04' + binascii.unhexlify(self._option_1)
+
             )
             
 class EthernetPayload:
@@ -91,3 +101,55 @@ class IPV4Payload:
         self._source = source
         self._destination = destination
         self._ip_option = ip_option
+
+
+class Options(Enum):
+    @staticmethod
+    def get_offer_options():
+        return (binascii.unhexlify(Options.option_53() + Options.option_51() + Options.option_1() + Options.option_59())
+            + Options.option_3() + Options.option_6() + Options.option_54() + Options.option_28() + Options.option_255()
+        )
+    
+    @staticmethod
+    def option_53():
+        return '350102'
+
+    @staticmethod
+    def option_51():
+        return '330400003840'
+    
+    @staticmethod
+    def option_3():
+        return binascii.unhexlify('0304') + Options.get_ip()
+    
+    @staticmethod
+    def option_6():
+        return binascii.unhexlify('0604') + Options.get_ip()
+
+    @staticmethod
+    def option_54():
+        return binascii.unhexlify('3604') + Options.get_ip()
+
+    @staticmethod
+    def option_28():
+        return binascii.unhexlify('1c04') + Options.get_broadcast_ip()
+
+    @staticmethod
+    def option_255():
+        return binascii.unhexlify('ff')
+
+    @staticmethod
+    def option_59():
+        return '3b0400003138'
+
+    @staticmethod
+    def option_1():
+        return '0104ffffff00'
+
+    @staticmethod
+    def get_broadcast_ip():
+        return socket.inet_pton(socket.AF_INET, '192.168.15.255')
+    
+    @staticmethod
+    def get_ip():
+        return socket.inet_pton(socket.AF_INET, socket.gethostbyname(socket.gethostname()))
